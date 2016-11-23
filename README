@@ -1,0 +1,211 @@
+#####
+# Copyright (c) 2016 Sigma Connectivity AB
+# Author: Christian Andersson, christian.andersson@sigmaconnectivity.se
+# License terms: The MIT License (MIT)
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+# DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+# OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+#
+# Setup Debian on NXP IMX7SABRE
+# Author: Christian Andersson, christian.andersson@sigmaconnectivity.se
+#
+# Purpose:
+#   - This README file will assist you to make u-boot, kernel and driver for IMX7SABRE board
+#
+# References:
+#   - "L4.1.15_1.2.0_GA BSP release supports the i.MX7D SABRE board.
+#   --- http://www.nxp.com/products/microcontrollers-and-processors/arm-processors/i.mx-applications-processors/i.mx-software-and-tools:IMXSW_HOME
+#
+# This was tested on:
+#   - Ubuntu 16.04, x86_64
+#   - Ubuntu 14.04, x86_64
+#
+#####
+
+
+Installing Debian/Linux on a NXP IMX7SABRE board:
+-------------------------------------------------
+* Run the script build_debian.sh
+$chmod +x build_debian.sh
+$./build_debian.sh
+
+* Follow the remaining steps for flashing the output to a SD Card under the "Write to a SD Card" section in this README file.
+
+
+Write to a SD Card:
+-------------------
+
+0) PLEASE NOTE!!! It is very dangerous to run dd using the wrong disk. You can end up messing up your root partition. Please follow the guide below with caution.
+
+
+1) Identify the device ID of the SD Card
+* If you have inserted the SD Card into your Desktop, please eject it
+* Run $lsblk
+
+* It will output something like this:
+$ lsblk
+NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sda      8:0    0 238,5G  0 disk
+├─sda1   8:1    0   499M  0 part
+├─sda2   8:2    0 135,5G  0 part /mnt/storage
+├─sda3   8:3    0     1K  0 part
+├─sda5   8:5    0  86,7G  0 part /
+└─sda6   8:6    0  15,9G  0 part [SWAP]
+
+
+* Insert the SD Card
+* Run $lsblk
+
+* It will output something like this:
+$ lsblk
+NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sda      8:0    0 238,5G  0 disk
+├─sda1   8:1    0   499M  0 part
+├─sda2   8:2    0 135,5G  0 part /mnt/storage
+├─sda3   8:3    0     1K  0 part
+├─sda5   8:5    0  86,7G  0 part /
+└─sda6   8:6    0  15,9G  0 part [SWAP]
+sdb      8:16   1  27,5G  0 disk
+├─sdb1   8:17   1     1G  0 part
+├─sdb2   8:18   1     8G  0 part
+└─sdb3   8:19   1  18,5G  0 part
+
+
+* In my case we can see that the device name of the SD Card is /dev/sdb
+
+
+2) Save the device name in a environment variable
+* Use the device name of the SD Card that you got from lsblk. In my example above: /dev/sdb
+$export SD_CARD=/dev/<INSERT YOUR DEVICE NAME HERE>
+
+
+3) Unmount the SD Card file systems if mounted
+$for n in ${SD_CARD}* ; do sudo umount $n ; done
+
+
+4) Erase the SD Cards existing partition table
+$sudo dd if=/dev/zero of=${SD_CARD} bs=1M count=10
+
+
+5) Install u-boot (the boot loader) on the SD Card
+* If you ran the script mentioned in the "Installing Debian/Linux on a NXP IMX7SABRE board" section of this README then you can find the path to u-boot from the output of the script. See the example output from running the script below.
+Example: Path to u-boot.imx: "/tmp/debian_on_nxp/output/uboot/u-boot.imx"
+
+* Run the command below and insert the path to u-boot.imx within the <> in the example below:
+$sudo dd if=<INSERT PATH TO u-boot.imx HERE> of=${SD_CARD} bs=512 seek=2
+
+Example: $sudo dd if=/tmp/debian_on_nxp/output/uboot/u-boot.imx of=${SD_CARD} bs=512 seek=2
+
+
+6) Set up the partitions on the SD Card using fdisk
+* Run $sudo fdisk ${SD_CARD}
+* Type: 'd' and press enter. If fdisk asks for partition number press enter (use the default value). This will delete any existing partitions on the SD Card.
+* Repeat the delete step above until all partitions has been deleted. If all partitions has been deleted fdisk will print "No partition is defined yet!" when pressing 'd' followed by enter.
+* Type: 'n' and press enter. Create a new partition.
+* Type: 'p' and press enter. Partition type will be set to primary.
+* Type: '1' and press enter. Apply the change to partition 1.
+* Press enter. Use the default first sector.
+* Type: '+1G' and press enter. The first partition will be 1G in size.
+* Type: 't' and press enter. Change the partition type.
+* Type: 'b' and press enter. Set the partition type to "W95 FAT32".
+* Type: 'n' and press enter. Create another new partition.
+* Type: 'p' and press enter. Partition type will be set to primary.
+* Type: '2' and press enter. Apply the change to partition 2.
+* Press enter. Use the default first sector.
+* Press enter. Use the default last sector. This will allocate the rest of the space on the SD Card for the second partition.
+* Type: 't' and press enter. Change the partition type.
+* Type: '2' and press enter. Apply the change to partition 2.
+* Type: '83' and press enter. Set the partition type to "Linux" (ext3).
+* Type: 'w' and press enter. Write the partition table to the SD Card and quit fdisk.
+
+* Now your partition table should look something like this:
+$ sudo fdisk -l ${SD_CARD}
+Disk /dev/sdb: 27,5 GiB, 29504831488 bytes, 57626624 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0xe99fe5b8
+
+Device     Boot    Start      End  Sectors  Size Id Type
+/dev/sdb1           2048  2099199  2097152    1G  b W95 FAT32
+/dev/sdb2        2099200 18876415 16777216    8G 83 Linux
+
+
+7) Build the file system
+* Build the 1G fat32 file system
+$sudo mkfs.vfat -n KERNEL ${SD_CARD}1
+
+* Build the 8G ext3 file system
+$sudo mkfs.ext3 ${SD_CARD}2
+
+
+8) Create the mount points
+* Create a mount point for the SD Card Kernel file system
+$sudo mkdir /mnt/kernel
+
+* Create a mount point for the SD Card Debian/Linux root file system
+$sudo mkdir /mnt/sd_card_root_fs
+
+
+9) Mount the SD Card partitions on the following mount point: /mnt/kernel
+* Mount the 1G fat32 file system used for the kernel on /mnt/kernel
+$sudo mount ${SD_CARD}1 /mnt/kernel
+
+*Mount the 8G ext3 file system on the following mount point: /mnt/sd_card_root_fs
+$sudo mount ${SD_CARD}2 /mnt/sd_card_root_fs
+
+
+10) Copy the Device Tree Blob (imx7d-sdb.dtb) to the 1G fat32 file system used for the kernel, mounted on /mnt/kernel
+* Copy the Device Tree Blob to /mnt/kernel. If you ran the script mentioned in the "Installing Debian/Linux on a NXP IMX7SABRE board" then you can find the path to the DTB from the output of the script. See the example output from running the script below.
+Example: Path to the Device Tree Blob (imx7d-sdb.dtb): "/tmp/debian_on_nxp/output/kernel/arch/arm/boot/dts/imx7d-sdb.dtb"
+
+$sudo cp -v <INSERT PATH TO imx7d-sdb.dtb HERE> /mnt/kernel
+
+
+11) Copy the Linux kernel image (zImage) to the 1G fat32 file system used for the kernel, mounted on /mnt/kernel
+* Copy the Linux kernel image to /mnt/kernel. If you ran the script mentioned in the "Installing Debian/Linux on a NXP IMX7SABRE board" then you can find the path to the zImage from the output of the script. See the example output from running the script below.
+Example: Path to Linux kernel image (zImage): "/tmp/debian_on_nxp/output/kernel/arch/arm/boot/zImage"
+
+$sudo cp -v <INSERT PATH TO zImage HERE> /mnt/kernel
+
+
+12) Copy the Debian/Linux root file system to the SD Card
+* Copy the Debian/Linux root file system to /mnt/sd_card_root_fs. If you ran the script mentioned in the "Installing Debian/Linux on a NXP IMX7SABRE board" section then the root fs path was printed. See the example output from running the script below.
+Example: Path to the Debian/Linux root file system: "/tmp/debian_on_nxp/output/debian_fs/wheezy/"
+
+$sudo cp -vr <INSERT PATH TO root fs HERE>/* /mnt/sd_card_root_fs
+
+Example: $sudo cp -vr /tmp/debian_on_nxp/output/debian_fs/wheezy/* /mnt/sd_card_root_fs
+
+
+13) Unmount the SD Card file systems if mounted
+$for n in ${SD_CARD}* ; do sudo umount $n ; done
+
+
+14) You can now insert the SD Card into the NXP IMX7SABRE board and test the image. For the u-boot and kernel output you can plugin a usb in the DEBUG UART micro USB slot on the NXP board and then run dmesg and grep for the serial tty device to be used:
+$dmesg |grep tty
+[    0.000000] console [tty0] enabled
+[    0.816325] 0000:00:16.3: ttyS4 at I/O 0x3080 (irq = 19, base_baud = 115200) is a 16550A
+[80460.318106] usb 1-1: FTDI USB Serial Device converter now attached to ttyUSB0
+[80460.319275] usb 1-1: FTDI USB Serial Device converter now attached to ttyUSB1
+
+* Instal gnu screen (used for the serial communication)
+$ sudo apt-get install screen
+
+* Start listning on /dev/ttyUSB0 using screen
+$screen /dev/ttyUSB0 115200
+
+
+15) If you connect a monitor to the HDMI port on the NXP board, you should now see a login shell. You can login with user: root and password: root. If you connect a TP cable with internet connection you should be able to get a IP address and then you can run $apt-get install <PACKAGE_TO_INSTALL> on the NXP board.
+
+
